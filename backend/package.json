@@ -4,16 +4,22 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prisma": "^7"
   },
   "peerDependencies": {
     "typescript": "^7"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.69",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7",
     "@tavily/core": "^0.7.11",
     "@types/express": "^5.0.6",
     "ai": "^7.0.99",
     "express": "^5.2.1"
+  },
+  "scripts": {
+    "postinstall": "prisma skills sync || exit 0"
   }
 }
