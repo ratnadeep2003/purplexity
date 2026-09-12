@@ -10,11 +10,6 @@ app.use(express.json());
 
 const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
 
-//Signin
-app.post('/signin', async(req,res)=>{
-
-})
-
 //Past conversations get
 app.get('/conversations',async(req,res)=>{
 
