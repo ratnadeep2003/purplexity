@@ -4,6 +4,7 @@ import { streamText } from 'ai';
 import { google } from '@ai-sdk/google';
 import { PROMPT_TEMPLATE, SYSTEM_PROPMT } from "./prompt";
 import { prisma } from "./db";
+import {middleware} from './middleware'
 const app = express();
 app.use(express.json());
 
@@ -11,17 +12,17 @@ app.use(express.json());
 const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
 
 //Past conversations get
-app.get('/conversations',async(req,res)=>{
+app.get('/conversations',middleware, async(req,res)=>{
 
 })
 
 //Past conversations get
-app.get('/conversation/:conversationId',async(req,res)=>{
+app.get('/conversation/:conversationId',middleware,async(req,res)=>{
     
 })
 
 
-app.post("/purplexity_ask", async (req, res) => {
+app.post("/purplexity_ask",middleware, async (req, res) => {
     //Step- 1: get the query from user
     const query = req.body.query;
 
@@ -73,7 +74,7 @@ app.post("/purplexity_ask", async (req, res) => {
 
 })
 
-app.post('/purplexity_ask/follow_up', async(req,res)=>{
+app.post('/purplexity_ask/follow_up',middleware, async(req,res)=>{
     //Step -1: get the existing chat from db
     //Step -2: forward the full hisyry to llm
     //Step -3: forward the full history to user
