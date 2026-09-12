@@ -1,8 +1,11 @@
+import { BrowserRouter, Routes, Route } from "react-router";
 export function App() {
   return (
-    <div className="container mx-auto p-8 text-center relative z-10">
-      
-    </div>
+    <BrowserRouter>
+      <Routes>
+          <Route path='/auth' element={<Auth/>}/>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
