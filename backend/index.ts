@@ -22,13 +22,12 @@ app.post("/purplexity_ask", async (req, res) => {
         .replace("{{USER_QUERY}}", query);
 
     const result = streamText({
-        model: google('gemini-2.0-flash'),
+        model: google('gemini-3.6-flash'),
         prompt: prompt,
         system: SYSTEM_PROPMT,
     });
 
-    res.header('Cache-Control', 'no-cache');
-    res.header('Content-Type', 'text/event-stream');
+    res.header('Content-Type', 'text/plain');
 
     for await (const textPart of result.textStream) {
         res.write(textPart);
