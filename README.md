@@ -6,13 +6,13 @@
 
 ##  Features
 
-- ** Real-Time Web Search & Synthesis**: Leverages Tavily Search API for deep web retrieval and Google Gemini (`gemini-3.5-flash-lite`) to synthesize answers with accurate citations.
-- ** Streaming Responses**: Low-latency token streaming with markdown formatting, syntax-highlighted code blocks, and structured `<ANSWER>` parsing.
-- ** Interactive Source Cards**: Clean grid of source citations showing site favicons, domain names, preview titles, and direct external links.
-- ** Conversational Follow-Ups**: Dynamically extracted related questions (`<FOLLOW-UPS>`) rendered as clickable chips to explore topics deeper in the same thread.
-- ** Persistent Search Threads**: Conversations and message history are automatically saved into PostgreSQL via Prisma ORM.
-- ** Robust Supabase Authentication**: Supports Google and GitHub OAuth with automatic background synchronization between Supabase Auth (`auth.users`) and the PostgreSQL `User` database table.
-- ** Sleek Perplexity UI**: Modern dark-themed layout with a collapsible sidebar, `Ctrl+K` shortcuts, focus modes (*Web Search*, *Academic*, *Code*, *Writing*), and live database sync badges.
+-  Real-Time Web Search & Synthesis**: Leverages Tavily Search API for deep web retrieval and Google Gemini (`gemini-3.5-flash-lite`) to synthesize answers with accurate citations.
+-  Streaming Responses**: Low-latency token streaming with markdown formatting, syntax-highlighted code blocks, and structured `<ANSWER>` parsing.
+-  Interactive Source Cards**: Clean grid of source citations showing site favicons, domain names, preview titles, and direct external links.
+-  Conversational Follow-Ups**: Dynamically extracted related questions (`<FOLLOW-UPS>`) rendered as clickable chips to explore topics deeper in the same thread.
+-  Persistent Search Threads**: Conversations and message history are automatically saved into PostgreSQL via Prisma ORM.
+-  Robust Supabase Authentication**: Supports Google and GitHub OAuth with automatic background synchronization between Supabase Auth (`auth.users`) and the PostgreSQL `User` database table.
+-  Sleek Perplexity UI**: Modern dark-themed layout with a collapsible sidebar, `Ctrl+K` shortcuts, focus modes (*Web Search*, *Academic*, *Code*, *Writing*), and live database sync badges.
 
 ---
 
