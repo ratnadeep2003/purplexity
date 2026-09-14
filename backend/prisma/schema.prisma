@@ -7,7 +7,7 @@ generator client {
   provider = "prisma-client"
   output   = "./generated"
   engineType = "client"
-  runtimr = "bun"
+  runtime = "bun"
 }
 
 datasource db {
@@ -20,7 +20,7 @@ model User {
   email String
   provider AuthProvider
   name String
-  superbaseId String
+  supabaseId String 
   conversations Conversation[]
 }
 
