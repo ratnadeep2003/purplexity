@@ -1,393 +1,139 @@
-import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/client";
-import type { User, Session } from "@supabase/supabase-js";
-import { useNavigate } from "react-router";
-import axios from "axios";
-import { BACKEND_URL } from "@/lib/config";
-import { Sidebar, type ConversationSummary } from "@/components/Sidebar";
-import { SearchHero } from "@/components/SearchHero";
-import {
-  ThreadView,
-  type ThreadMessage,
-  parsePurplexityResponse,
-} from "@/components/ThreadView";
+import { AppShell } from "@/components/AppShell";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import type { User } from "@supabase/supabase-js";
+import { ArrowUp, BookOpen, LoaderCircle, Search, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Navigate } from "react-router";
 
 const supabase = createClient();
 
+const suggestedPrompts = [
+  "What are the most important AI developments this week?",
+  "Explain quantum computing in simple terms",
+  "Compare the best approaches to learning TypeScript",
+];
+
 export default function Dashboard() {
-  const navigate = useNavigate();
-
-  // User & Auth state
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [dbSynced, setDbSynced] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [query, setQuery] = useState("");
 
-  // Layout & Navigation state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
-
-  // Active Thread / Search state
-  const [currentQuery, setCurrentQuery] = useState("");
-  const [messages, setMessages] = useState<ThreadMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-
-  /**
-   * Synchronize authenticated user with backend and fetch conversation history
-   */
-  const syncWithBackend = useCallback(async (jwt: string) => {
-    try {
-      // 1. Verify and upsert user in Prisma User table
-      const authRes = await axios.get(`${BACKEND_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      if (authRes.data?.synced) {
-        setDbSynced(true);
-      }
-
-      // 2. Fetch user's conversation threads
-      const convRes = await axios.get(`${BACKEND_URL}/conversations`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      if (Array.isArray(convRes.data)) {
-        setConversations(convRes.data);
-      }
-    } catch (err) {
-      console.error("Backend sync error:", err);
-    }
-  }, []);
-
-  /**
-   * Monitor auth state
-   */
   useEffect(() => {
-    async function initAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    let mounted = true;
 
-      if (session?.user) {
-        setUser(session.user);
-        setSession(session);
-        await syncWithBackend(session.access_token);
+    void supabase.auth.getUser().then(({ data }) => {
+      if (mounted) {
+        setUser(data.user ?? null);
+        setIsLoading(false);
       }
-    }
-
-    initAuth();
+    });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (newSession?.user) {
-        setUser(newSession.user);
-        setSession(newSession);
-        await syncWithBackend(newSession.access_token);
-      } else {
-        setUser(null);
-        setSession(null);
-        setDbSynced(false);
-        setConversations([]);
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setUser(session?.user ?? null);
+        setIsLoading(false);
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
-  }, [syncWithBackend]);
-
-  /**
-   * Keyboard shortcut: Ctrl+K / Cmd+K for new thread
-   */
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        handleNewThread();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  /**
-   * Reset to new search
-   */
-  const handleNewThread = () => {
-    setActiveConversationId(null);
-    setCurrentQuery("");
-    setMessages([]);
-    setIsStreaming(false);
-  };
-
-  /**
-   * Load an existing conversation thread
-   */
-  const handleSelectConversation = async (id: string) => {
-    if (!session?.access_token) return;
-
-    try {
-      const res = await axios.get(`${BACKEND_URL}/conversation/${id}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      const conv = res.data;
-      if (!conv) return;
-
-      setActiveConversationId(conv.id);
-      setCurrentQuery(conv.title || "Thread");
-
-      const loadedMessages: ThreadMessage[] = (conv.messages || []).map(
-        (m: any) => ({
-          id: m.id,
-          role: m.role as "User" | "Assistant",
-          content: m.content,
-        })
-      );
-
-      setMessages(loadedMessages);
-    } catch (err) {
-      console.error("Failed to load conversation:", err);
-    }
-  };
-
-  /**
-   * Execute new Purplexity search query
-   */
-  const handleSearch = async (query: string, focusMode: string) => {
-    if (!session?.access_token) {
-      navigate("/auth");
-      return;
-    }
-
-    setCurrentQuery(query);
-    setActiveConversationId(null);
-    setIsStreaming(true);
-
-    // Initial message setup: User question + placeholder assistant streaming reply
-    const initialUserMsg: ThreadMessage = { role: "User", content: query };
-    const initialAssistantMsg: ThreadMessage = {
-      role: "Assistant",
-      content: "",
-      isStreaming: true,
-    };
-    setMessages([initialUserMsg, initialAssistantMsg]);
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/purplexity_ask`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No readable stream");
-
-      const decoder = new TextDecoder();
-      let rawAccumulated = "";
-      let newConvId: string | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        rawAccumulated += chunk;
-
-        // Check for <CONVERSATION_ID> tag
-        const convMatch = rawAccumulated.match(
-          /<CONVERSATION_ID>([\s\S]*?)<\/CONVERSATION_ID>/
-        );
-        if (convMatch && convMatch[1] && !newConvId) {
-          newConvId = convMatch[1].trim();
-          setActiveConversationId(newConvId);
-        }
-
-        // Live update assistant message
-        setMessages([
-          initialUserMsg,
-          {
-            role: "Assistant",
-            content: rawAccumulated,
-            isStreaming: true,
-          },
-        ]);
-      }
-
-      // Final parsed update
-      const { sources, followUps } = parsePurplexityResponse(rawAccumulated);
-      setMessages([
-        initialUserMsg,
-        {
-          role: "Assistant",
-          content: rawAccumulated,
-          sources,
-          followUps,
-          isStreaming: false,
-        },
-      ]);
-
-      // Refresh conversations list in sidebar
-      if (session.access_token) {
-        syncWithBackend(session.access_token);
-      }
-    } catch (err: any) {
-      console.error("Search streaming error:", err);
-      setMessages([
-        initialUserMsg,
-        {
-          role: "Assistant",
-          content: `<ANSWER>Sorry, an error occurred while searching: ${err.message}. Please try again.</ANSWER>`,
-          isStreaming: false,
-        },
-      ]);
-    } finally {
-      setIsStreaming(false);
-    }
-  };
-
-  /**
-   * Execute follow-up query in existing conversation thread
-   */
-  const handleFollowUp = async (question: string) => {
-    if (!session?.access_token) {
-      navigate("/auth");
-      return;
-    }
-    if (!activeConversationId) return;
-
-    setIsStreaming(true);
-
-    // Append follow-up user query and placeholder assistant message
-    const userFollowUp: ThreadMessage = {
-      role: "User",
-      content: question,
-    };
-    const assistantFollowUp: ThreadMessage = {
-      role: "Assistant",
-      content: "",
-      isStreaming: true,
-    };
-
-    setMessages((prev) => [...prev, userFollowUp, assistantFollowUp]);
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/purplexity_ask/follow_up`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          query: question,
-          conversationId: activeConversationId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No readable stream");
-
-      const decoder = new TextDecoder();
-      let rawAccumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        rawAccumulated += chunk;
-
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "Assistant",
-            content: rawAccumulated,
-            isStreaming: true,
-          };
-          return updated;
-        });
-      }
-
-      const { sources, followUps } = parsePurplexityResponse(rawAccumulated);
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "Assistant",
-          content: rawAccumulated,
-          sources,
-          followUps,
-          isStreaming: false,
-        };
-        return updated;
-      });
-
-      // Refresh conversation list
-      syncWithBackend(session.access_token);
-    } catch (err: any) {
-      console.error("Follow-up error:", err);
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "Assistant",
-          content: `<ANSWER>Failed to process follow-up: ${err.message}</ANSWER>`,
-          isStreaming: false,
-        };
-        return updated;
-      });
-    } finally {
-      setIsStreaming(false);
-    }
-  };
-
-  const handleSignOut = async () => {
+  async function signOut() {
     await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setDbSynced(false);
-    handleNewThread();
-  };
+  }
+
+  if (isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background text-muted-foreground">
+        <LoaderCircle className="size-5 animate-spin" aria-label="Loading Purplexity" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   return (
-    <div className="flex h-screen w-full bg-[#131515] text-[#ECECEC] overflow-hidden font-sans">
-      {/* Sidebar */}
-      <Sidebar
-        user={user}
-        dbSynced={dbSynced}
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        onSelectConversation={handleSelectConversation}
-        onNewThread={handleNewThread}
-        onSignOut={handleSignOut}
-        onSignIn={() => navigate("/auth")}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
+    <AppShell
+      user={user}
+      onNewSearch={() => setQuery("")}
+      onSignOut={() => void signOut()}
+    >
+      <main className="mx-auto flex min-h-full w-full max-w-4xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-10 sm:pt-24 lg:px-14">
+        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center pb-24">
+          <div className="mb-10 text-center">
+            <div className="mx-auto mb-5 grid size-11 place-items-center rounded-2xl bg-secondary text-primary">
+              <Sparkles className="size-5" />
+            </div>
+            <h1 className="text-balance text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
+              What would you like to know?
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
+              Ask anything. Purplexity searches the web and brings the useful
+              parts together.
+            </p>
+          </div>
 
-      {/* Main Content View */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        {messages.length === 0 ? (
-          <SearchHero onSearch={handleSearch} isLoading={isStreaming} />
-        ) : (
-          <ThreadView
-            query={currentQuery}
-            messages={messages}
-            isStreaming={isStreaming}
-            onFollowUp={handleFollowUp}
-          />
-        )}
+          <form
+            className="rounded-2xl border border-border bg-card p-2 shadow-[0_12px_35px_-24px_rgba(20,40,40,0.45)]"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <Textarea
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Ask a question..."
+              className="min-h-28 resize-none border-0 bg-transparent px-3 pt-3 text-base shadow-none focus-visible:ring-0"
+              aria-label="Research question"
+            />
+            <div className="flex items-center justify-between gap-3 px-1 pb-1">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Search className="size-3.5" />
+                <span>Search the web</span>
+              </div>
+              <Button
+                type="submit"
+                size="icon"
+                className="size-9 rounded-xl"
+                disabled={!query.trim()}
+                aria-label="Send question"
+              >
+                <ArrowUp className="size-4" />
+              </Button>
+            </div>
+          </form>
+
+          <div className="mt-6">
+            <p className="mb-3 px-1 text-xs font-medium uppercase tracking-[0.13em] text-muted-foreground">
+              Explore a topic
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {suggestedPrompts.map((prompt) => (
+                <button
+                  className="group rounded-xl border border-border bg-card p-3 text-left text-sm leading-5 text-muted-foreground transition-colors hover:border-primary/25 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  key={prompt}
+                  onClick={() => setQuery(prompt)}
+                  type="button"
+                >
+                  <BookOpen className="mb-3 size-4 text-primary/70 transition-transform group-hover:-rotate-6" />
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <p className="text-center text-xs text-muted-foreground">
+          Purplexity can make mistakes. Check important information.
+        </p>
       </main>
-    </div>
+    </AppShell>
   );
 }
