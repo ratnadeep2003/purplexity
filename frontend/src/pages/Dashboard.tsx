@@ -51,6 +51,21 @@ export default function Dashboard() {
     conversationIdRef.current = conversationId;
   }, [conversationId]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuery("");
+        setMessages([]);
+        conversationIdRef.current = undefined;
+        navigate("/");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigate]);
+
   const authHeader = useCallback(async () => {
     const {
       data: { session },
@@ -284,9 +299,10 @@ export default function Dashboard() {
         onToggleCollapse={() => setIsSidebarCollapsed((v) => !v)}
       />
 
-      <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-10 sm:pt-24 lg:px-14">
+      {/* Adding items-center centers the content horizontally within the main container */}
+      <main className="flex min-h-screen w-full flex-1 flex-col items-center px-4 pt-14 sm:px-8 sm:pt-20">
         {messages.length === 0 ? (
-          <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center pb-24">
+          <section className="flex w-full max-w-2xl flex-1 flex-col justify-center pb-24">
             <div className="mb-10 text-center">
               <div className="mx-auto mb-5 grid size-11 place-items-center rounded-2xl bg-secondary text-primary">
                 <Sparkles className="size-5" />
@@ -355,9 +371,13 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
+
+            <p className="mt-8 text-center text-xs text-muted-foreground">
+              Purplexity can make mistakes. Check important information.
+            </p>
           </section>
         ) : (
-          <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 pb-32">
+          <section className="relative flex w-full max-w-2xl flex-1 flex-col gap-6 pb-48">
             {messages.map((message, i) => (
               <div
                 key={i}
@@ -367,7 +387,7 @@ export default function Dashboard() {
                   className={
                     message.role === "user"
                       ? "max-w-[85%] rounded-2xl bg-secondary px-4 py-2.5 text-sm leading-6"
-                      : "max-w-[85%] rounded-2xl bg-muted px-4 py-3 text-sm leading-6"
+                      : "w-full rounded-2xl bg-card p-4 border border-border text-sm leading-6"
                   }
                 >
                   {message.role === "assistant" && !message.content && isAsking ? (
@@ -377,10 +397,10 @@ export default function Dashboard() {
                   )}
 
                   {message.sources && message.sources.length > 0 && (
-                    <ul className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <ul className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground border-t border-border/50 pt-2">
                       {message.sources.map((s) => (
                         <li key={s.url}>
-                          <a href={s.url} target="_blank" rel="noreferrer" className="underline">
+                          <a href={s.url} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
                             {s.title}
                           </a>
                         </li>
@@ -391,44 +411,48 @@ export default function Dashboard() {
               </div>
             ))}
 
-            <form
-              className="fixed inset-x-0 bottom-0 mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card p-2 shadow-[0_12px_35px_-24px_rgba(20,40,40,0.45)]"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void ask(query);
-              }}
-            >
-              <Textarea
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+            {/* Fixed bottom container dynamically aligned to the max-w-2xl column */}
+            <div className="fixed bottom-0 left-0 right-0 z-10 flex justify-center bg-background/90 pb-4 pt-2 backdrop-blur-sm sm:left-[260px]">
+              <div className="w-full max-w-2xl px-4">
+                <p className="mb-2 text-center text-xs text-muted-foreground">
+                  Purplexity can make mistakes. Check important information.
+                </p>
+                <form
+                  className="rounded-2xl border border-border bg-card p-2 shadow-[0_12px_35px_-24px_rgba(20,40,40,0.45)]"
+                  onSubmit={(event) => {
                     event.preventDefault();
                     void ask(query);
-                  }
-                }}
-                placeholder="Ask a follow-up..."
-                className="min-h-14 resize-none border-0 bg-transparent px-3 pt-3 text-base shadow-none focus-visible:ring-0"
-                aria-label="Follow-up question"
-              />
-              <div className="flex items-center justify-end px-1 pb-1">
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-9 rounded-xl"
-                  disabled={!query.trim() || isAsking}
-                  aria-label="Send question"
+                  }}
                 >
-                  <ArrowUp className="size-4" />
-                </Button>
+                  <Textarea
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void ask(query);
+                      }
+                    }}
+                    placeholder="Ask a follow-up..."
+                    className="min-h-14 resize-none border-0 bg-transparent px-3 pt-3 text-base shadow-none focus-visible:ring-0"
+                    aria-label="Follow-up question"
+                  />
+                  <div className="flex items-center justify-end px-1 pb-1">
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="size-9 rounded-xl"
+                      disabled={!query.trim() || isAsking}
+                      aria-label="Send question"
+                    >
+                      <ArrowUp className="size-4" />
+                    </Button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </section>
         )}
-
-        <p className="text-center text-xs text-muted-foreground">
-          Purplexity can make mistakes. Check important information.
-        </p>
       </main>
     </div>
   );

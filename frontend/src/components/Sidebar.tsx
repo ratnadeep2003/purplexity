@@ -70,9 +70,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`relative flex flex-col h-screen bg-[#191A1A] border-r border-[#272929] transition-all duration-300 z-30 select-none ${
-        isCollapsed ? "w-[68px]" : "w-[260px]"
-      }`}
+      className={`relative flex flex-col h-screen bg-[#191A1A] border-r border-[#272929] transition-all duration-300 z-30 select-none ${isCollapsed ? "w-[68px]" : "w-[260px]"
+        }`}
     >
       {/* Header & Logo */}
       <div className="flex items-center justify-between px-4 h-16 border-b border-[#272929]/60">
@@ -81,36 +80,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={onNewThread}
             className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#13ADC7] to-[#20B2AA] flex items-center justify-center text-white shadow-lg shadow-[#13ADC7]/20 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-lg tracking-tight text-white flex items-center gap-1.5">
-                Purplexity
-                <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-[#13ADC7]/20 text-[#20B2AA] border border-[#20B2AA]/30">
-                  AI
-                </span>
-              </span>
-            </div>
+            <span className="font-bold text-lg tracking-tight text-white">
+              Purplexity
+            </span>
           </div>
         ) : (
           <div
             onClick={onNewThread}
-            className="w-9 h-9 mx-auto rounded-lg bg-gradient-to-tr from-[#13ADC7] to-[#20B2AA] flex items-center justify-center text-white cursor-pointer hover:scale-105 transition-transform shadow-md"
+            className="w-9 h-9 mx-auto rounded-lg bg-[#202222] flex items-center justify-center text-white cursor-pointer hover:bg-[#252828] transition-colors"
             title="Purplexity"
           >
-            <Sparkles className="w-5 h-5" />
+            <MessageSquare className="w-4 h-4" />
           </div>
         )}
 
         <button
           onClick={onToggleCollapse}
-          className={`p-1.5 rounded-md hover:bg-[#2A2B2B] text-zinc-400 hover:text-white transition-colors ${
-            isCollapsed ? "hidden" : "block"
-          }`}
-          title="Collapse sidebar"
+          className="p-1.5 rounded-md hover:bg-[#2A2B2B] text-zinc-400 hover:text-white transition-colors"
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <ChevronLeft className="w-4 h-4" />
+          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
       </div>
 
@@ -118,9 +107,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3">
         <button
           onClick={onNewThread}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-[#303333] hover:border-[#13ADC7]/50 bg-[#202222] hover:bg-[#252828] text-white text-sm font-medium transition-all shadow-sm group ${
-            isCollapsed ? "justify-center px-0" : "justify-between"
-          }`}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-[#303333] hover:border-[#13ADC7]/50 bg-[#202222] hover:bg-[#252828] text-white text-sm font-medium transition-all shadow-sm group ${isCollapsed ? "justify-center px-0" : "justify-between"
+            }`}
           title="New Search (Ctrl+K)"
         >
           <div className="flex items-center gap-2.5">
@@ -141,19 +129,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="space-y-1">
           <button
             onClick={onNewThread}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-300 hover:text-white hover:bg-[#222424] transition-colors ${
-              isCollapsed ? "justify-center px-0" : ""
-            }`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-300 hover:text-white hover:bg-[#222424] transition-colors ${isCollapsed ? "justify-center px-0" : ""
+              }`}
             title="Discover"
           >
             <Compass className="w-4 h-4 text-zinc-400" />
             {!isCollapsed && <span>Discover</span>}
           </button>
           <button
-            onClick={() => {}}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-300 hover:text-white hover:bg-[#222424] transition-colors ${
-              isCollapsed ? "justify-center px-0" : ""
-            }`}
+            onClick={() => { }}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-300 hover:text-white hover:bg-[#222424] transition-colors ${isCollapsed ? "justify-center px-0" : ""
+              }`}
             title="Library"
           >
             <Library className="w-4 h-4 text-zinc-400" />
@@ -185,11 +171,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       key={conv.id}
                       onClick={() => onSelectConversation(conv.id)}
-                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all group ${
-                        isActive
+                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all group ${isActive
                           ? "bg-[#252828] text-[#20B2AA] font-medium border border-[#20B2AA]/20"
                           : "text-zinc-300 hover:text-white hover:bg-[#202222]"
-                      }`}
+                        }`}
                       title={conv.title || "Thread"}
                     >
                       <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
@@ -209,27 +194,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-[#272929] bg-[#161717]">
         {user ? (
           <div className="space-y-2">
-            {!isCollapsed && (
-              <div className="flex items-center justify-between px-1">
-                {/* Supabase & Users DB status badge */}
-                <div
-                  className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-full"
-                  title="Verified synced in Supabase Auth & PostgreSQL User table"
-                >
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  <span>Auth & DB Synced</span>
-                </div>
-
-                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/50">
-                  {provider}
-                </span>
-              </div>
-            )}
 
             <div
-              className={`flex items-center gap-2.5 p-2 rounded-xl bg-[#202222] border border-[#2B2E2E] ${
-                isCollapsed ? "justify-center p-1.5" : ""
-              }`}
+              className={`flex items-center gap-2.5 p-2 rounded-xl bg-[#202222] border border-[#2B2E2E] ${isCollapsed ? "justify-center p-1.5" : ""
+                }`}
             >
               {avatarUrl ? (
                 <img
@@ -268,9 +236,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <button
             onClick={onSignIn}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#20B2AA] hover:bg-[#1BA199] text-white text-xs font-semibold shadow-md shadow-[#20B2AA]/20 transition-all ${
-              isCollapsed ? "justify-center px-0" : "justify-center"
-            }`}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#20B2AA] hover:bg-[#1BA199] text-white text-xs font-semibold shadow-md shadow-[#20B2AA]/20 transition-all ${isCollapsed ? "justify-center px-0" : "justify-center"
+              }`}
           >
             <LogIn className="w-4 h-4" />
             {!isCollapsed && <span>Sign In</span>}
