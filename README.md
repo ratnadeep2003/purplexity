@@ -6,13 +6,13 @@
 
 ##  Features
 
--  Real-Time Web Search & Synthesis**: Leverages Tavily Search API for deep web retrieval and Google Gemini (`gemini-3.5-flash-lite`) to synthesize answers with accurate citations.
--  Streaming Responses**: Low-latency token streaming with markdown formatting, syntax-highlighted code blocks, and structured `<ANSWER>` parsing.
--  Interactive Source Cards**: Clean grid of source citations showing site favicons, domain names, preview titles, and direct external links.
--  Conversational Follow-Ups**: Dynamically extracted related questions (`<FOLLOW-UPS>`) rendered as clickable chips to explore topics deeper in the same thread.
--  Persistent Search Threads**: Conversations and message history are automatically saved into PostgreSQL via Prisma ORM.
--  Robust Supabase Authentication**: Supports Google and GitHub OAuth with automatic background synchronization between Supabase Auth (`auth.users`) and the PostgreSQL `User` database table.
--  Sleek Perplexity UI**: Modern dark-themed layout with a collapsible sidebar, `Ctrl+K` shortcuts, focus modes (*Web Search*, *Academic*, *Code*, *Writing*), and live database sync badges.
+-  **Real-Time Web Search & Synthesis**: Leverages Tavily Search API for deep web retrieval and Google Gemini (`gemini-3.5-flash-lite`) to synthesize answers with accurate citations.
+-  **Streaming Responses**: Low-latency token streaming with markdown formatting, syntax-highlighted code blocks, and structured `<ANSWER>` parsing.
+-  **Interactive Source Cards**: Clean grid of source citations showing site favicons, domain names, preview titles, and direct external links.
+-  **Conversational Follow-Ups**: Dynamically extracted related questions (`<FOLLOW-UPS>`) rendered as clickable chips to explore topics deeper in the same thread.
+-  **Persistent Search Threads**: Conversations and message history are automatically saved into PostgreSQL via Prisma ORM.
+-  **Robust Supabase Authentication**: Supports Google and GitHub OAuth with automatic background synchronization between Supabase Auth (`auth.users`) and the PostgreSQL `User` database table.
+-  **Sleek Perplexity UI**: Modern dark-themed layout with a collapsible sidebar, `Ctrl+K` shortcuts, focus modes (*Web Search*, *Academic*, *Code*, *Writing*), and live database sync badges.
 
 ---
 
@@ -41,13 +41,18 @@ purplexity/
 ├── backend/
 │   ├── prisma/
 │   │   ├── migrations/          # Prisma database migrations
-│   │   ├── schema.prisma        # Database schema (User, Conversation, Message)
-│   │   └── supabase_trigger.sql # Optional Supabase SQL trigger for DB-level sync
+│   │   └── schema.prisma        # Database schema (User, Conversation, Message)
+│   ├── routes/
+│   │   ├── ask.ts               # POST /api/v1/ask — streaming SSE answer endpoint
+│   │   └── conversations.ts     # Conversation CRUD routes
 │   ├── client.ts                # Supabase server client
+│   ├── config.ts                # Validated environment config (zod)
 │   ├── db.ts                    # Prisma client with PostgreSQL adapter
-│   ├── index.ts                 # Express API routes & streaming logic
+│   ├── http.ts                  # ApiError, asyncHandler, errorHandler
+│   ├── index.ts                 # Express app setup, middleware, router mounting
 │   ├── middleware.ts            # Supabase auth token verification & user upsert
-│   ├── prompt.ts                # AI system prompt and answer/follow-up template
+│   ├── prompt.ts                # AI system prompt and prompt builder
+│   ├── serializers.ts           # Source normalization & message serialization
 │   └── package.json
 │
 ├── frontend/
@@ -62,6 +67,7 @@ purplexity/
 │   │   ├── lib/
 │   │   │   ├── client.ts        # Supabase browser client
 │   │   │   └── config.ts        # Backend URL configuration
+│   │   ├── purplexity-logo.png  # App logo (sidebar + favicon)
 │   │   ├── App.tsx              # Router setup
 │   │   ├── frontend.tsx         # React root entry point
 │   │   ├── index.css            # Custom styling & Tailwind import
@@ -108,50 +114,49 @@ BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY="your-supabase-publishable-key"
 
 ### Prerequisites
 - [Bun](https://bun.sh/) (v1.2+) installed on your machine.
+- A Supabase project with Google and GitHub OAuth providers enabled.
 
 ### 1. Start the Backend
 
 ```bash
-# Navigate to backend directory
 cd backend
 
-# Install dependencies
 bun install
 
-# Generate Prisma client
-bun run prisma generate
+# Generate the Prisma client
+bun run db:generate
 
-# Start the backend server (runs on port 3001)
-bun run index.ts
+# Apply database migrations (uses DIRECT_URL, see .env below)
+bun run db:migrate
+
+# Start the dev server with hot reload (runs on port 3001)
+bun run dev
 ```
 
 ### 2. Start the Frontend
 
 ```bash
-# Navigate to frontend directory
 cd frontend
 
-# Install dependencies
 bun install
 
 # Start development server with hot-reloading (runs on port 3000)
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
+#### Open [http://localhost:3000](http://localhost:3000) in your browser.
 ---
 
 ##  API Endpoints
 
 | Method | Route | Auth Required | Description |
 |---|---|:---:|---|
-| `GET` | `/auth/me` | Yes | Verifies token, upserts user, and returns profile & sync status |
-| `POST` | `/auth/sync` | Yes | Triggers manual synchronization of current user into `User` table |
-| `GET` | `/conversations` | Yes | Retrieves list of all past search threads for the user |
-| `GET` | `/conversation/:conversationId` | Yes | Retrieves a specific conversation with all message turns |
-| `POST` | `/purplexity_ask` | Yes | Performs Tavily search, creates conversation, and streams AI answer |
-| `POST` | `/purplexity_ask/follow_up` | Yes | Performs search for a follow-up query and appends to existing thread |
+| `GET` | `/health` | No | Health check |
+| `POST` | `/api/v1/ask` | Yes | Performs Tavily search, creates/continues a conversation, and streams the AI answer via SSE |
+| `GET` | `/api/v1/conversations` | Yes | Lists the user's conversations (paginated via `cursor`/`limit`) |
+| `GET` | `/api/v1/conversations/:conversationId` | Yes | Retrieves a conversation with its full message history |
+| `PATCH` | `/api/v1/conversations/:conversationId` | Yes | Renames a conversation |
+| `DELETE` | `/api/v1/conversations/:conversationId` | Yes | Deletes a conversation |
 
 ---
 
@@ -159,12 +164,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```prisma
 model User {
-  id            String         @id @default(uuid())
-  email         String
-  provider      AuthProvider
-  name          String
-  supabaseId    String 
+  id            String         @id
+  email         String         @unique
+  provider      String?
+  name          String?
+  avatarUrl     String?
   conversations Conversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Conversation {
@@ -172,34 +179,29 @@ model Conversation {
   title     String?
   slug      String
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Message {
-  id              Int          @id @default(autoincrement())
-  content         String
-  role            MessageRole
-  converstaionId  String
-  conversation    Conversation @relation(fields: [converstaionId], references: [id])
-  createdAt       DateTime     @default(now())
+  id             Int          @id @default(autoincrement())
+  content        String
+  role           MessageRole
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sources        Json?
+  followUps      Json?
+  createdAt      DateTime     @default(now())
 }
 
 enum MessageRole {
-  User 
+  User
   Assistant
-}
-
-enum AuthProvider {
-  Github
-  Google
 }
 ```
 
 > **Optional Database Trigger**: To mirror new sign-ups from `auth.users` directly to `public."User"` inside Supabase even without backend requests, execute the script located in [`backend/prisma/supabase_trigger.sql`](file:///d:/Ratnadeep/projects/purplexity/backend/prisma/supabase_trigger.sql) in your Supabase SQL Editor.
 
 ---
-
-##  License
-
-MIT License. Built for fast, intelligent knowledge retrieval.
