@@ -15,11 +15,3 @@ export const MessageRole = {
 } as const
 
 export type MessageRole = (typeof MessageRole)[keyof typeof MessageRole]
-
-
-export const AuthProvider = {
-  Github: 'Github',
-  Google: 'Google'
-} as const
-
-export type AuthProvider = (typeof AuthProvider)[keyof typeof AuthProvider]

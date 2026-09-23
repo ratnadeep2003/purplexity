@@ -1,52 +1,52 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "./generated"
+  provider   = "prisma-client"
+  output     = "./generated"
   engineType = "client"
-  runtime = "bun"
+  runtime    = "bun"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-//defining the schema
 model User {
-  id String @id @default(uuid())
-  email String
-  provider AuthProvider
-  name String
-  supabaseId String 
+  id            String         @id
+  email         String         @unique
+  provider      String?
+  name          String?
+  avatarUrl     String?
   conversations Conversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Conversation {
-  id String @id @default(uuid())
-  title String?
-  slug String
-  userId String
-  messages Message[]
-  user User @relation(fields: [userId], references: [id])
+  id        String    @id @default(uuid())
+  title     String?
+  slug      String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
 }
 
 model Message {
-  id Int @id @default(autoincrement())
-  content String
-  role MessageRole
-  converstaionId String
-  conversation Conversation @relation(fields: [converstaionId], references: [id])
-  createdAt DateTime @default(now() )
+  id             Int          @id @default(autoincrement())
+  content        String
+  role           MessageRole
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sources        Json?
+  followUps      Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 enum MessageRole {
-  User 
+  User
   Assistant
-}
-enum AuthProvider {
-  Github
-  Google
 }

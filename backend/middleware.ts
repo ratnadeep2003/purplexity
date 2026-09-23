@@ -1,96 +1,67 @@
 import type { NextFunction, Request, Response } from "express";
-import { createSupabaseClient } from "./client";
 import { prisma } from "./db";
+import { ApiError } from "./http";
+import { supabase } from "./client";
 
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: string;
-      supabaseUser?: any;
-      dbUser?: any;
-    }
-  }
+export type AuthContext = {
+  userId: string;
+  email: string;
+};
+
+function text(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-const client = createSupabaseClient();
-
-/**
- * Synchronizes a Supabase user object into the Prisma User table using upsert.
- * Ensures display name fallbacks, provider normalization, and handles missing fields cleanly.
- */
-export async function syncSupabaseUser(user: any) {
-  if (!user || !user.id) return null;
-
-  // Extract display name with fallbacks
-  const name =
-    user.user_metadata?.full_name ||
-    user.user_metadata?.name ||
-    user.user_metadata?.user_name ||
-    user.user_metadata?.preferred_username ||
-    (user.email ? user.email.split("@")[0] : "User");
-
-  // Extract provider with fallbacks
-  const rawProvider =
-    user.app_metadata?.provider ||
-    (user.app_metadata?.providers && user.app_metadata.providers[0]) ||
-    "google";
-  const provider = rawProvider.toString().toLowerCase().includes("github") ? "Github" : "Google";
-
-  const email = user.email || "";
-
+export async function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    const synced = await prisma.user.upsert({
-      where: { id: user.id },
-      update: {
-        email,
-        name,
-        provider,
-        supabaseId: user.id,
-      },
+    const authorization = req.header("authorization");
+    const match = authorization?.match(/^Bearer\s+(.+)$/i);
+
+    if (!match?.[1]) {
+      throw new ApiError(401, "UNAUTHORIZED", "A Bearer token is required.");
+    }
+
+    const { data, error } = await supabase.auth.getUser(match[1]);
+
+    if (error || !data.user) {
+      throw new ApiError(401, "UNAUTHORIZED", "Your session is invalid or expired.");
+    }
+
+    if (!data.user.email) {
+      throw new ApiError(400, "PROFILE_INCOMPLETE", "Your account needs an email address.");
+    }
+
+    const metadata = data.user.user_metadata as Record<string, unknown>;
+    const appMetadata = data.user.app_metadata as Record<string, unknown>;
+
+    await prisma.user.upsert({
+      where: { id: data.user.id },
       create: {
-        id: user.id,
-        supabaseId: user.id,
-        email,
-        name,
-        provider,
+        id: data.user.id,
+        email: data.user.email,
+        name: text(metadata.full_name) ?? text(metadata.name) ?? null,
+        avatarUrl: text(metadata.avatar_url) ?? text(metadata.picture) ?? null,
+        provider: text(appMetadata.provider) ?? null,
+      },
+      update: {
+        email: data.user.email,
+        name: text(metadata.full_name) ?? text(metadata.name) ?? null,
+        avatarUrl: text(metadata.avatar_url) ?? text(metadata.picture) ?? null,
+        provider: text(appMetadata.provider) ?? null,
       },
     });
 
-    return synced;
-  } catch (err) {
-    console.error("Failed to sync user to database:", err);
-    throw err;
-  }
-}
-
-export async function middleware(req: Request, res: Response, next: NextFunction) {
-  const rawToken = req.headers.authorization;
-  if (!rawToken) {
-    return res.status(401).json({ message: "Authorization header missing" });
-  }
-
-  // Support both "Bearer <token>" and raw token
-  const token = rawToken.startsWith("Bearer ") ? rawToken.slice(7).trim() : rawToken.trim();
-
-  try {
-    const { data, error } = await client.auth.getUser(token);
-    if (error || !data?.user) {
-      return res.status(401).json({
-        message: "Invalid or expired authorization token",
-        error: error?.message,
-      });
-    }
-
-    const user = data.user;
-    const dbUser = await syncSupabaseUser(user);
-
-    req.userId = user.id;
-    req.supabaseUser = user;
-    req.dbUser = dbUser;
+    res.locals.auth = {
+      userId: data.user.id,
+      email: data.user.email,
+    } satisfies AuthContext;
 
     next();
-  } catch (err) {
-    console.error("Auth middleware error:", err);
-    return res.status(500).json({ message: "Internal authentication error" });
+  } catch (error) {
+    next(error);
   }
 }
