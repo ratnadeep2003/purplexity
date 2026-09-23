@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/client";
-import { AppShell } from "@/components/AppShell";
+import { Sidebar, type ConversationSummary } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { User } from "@supabase/supabase-js";
 import { ArrowUp, BookOpen, LoaderCircle, Search, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 
 const supabase = createClient();
@@ -40,9 +40,55 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isAsking, setIsAsking] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const navigate = useNavigate();
   const { conversationId } = useParams();
   const conversationIdRef = useRef<string | undefined>(conversationId);
+  const skipLoadRef = useRef(false);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  const authHeader = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session ? { Authorization: `Bearer ${session.access_token}` } : null;
+  }, []);
+
+  const fetchConversations = useCallback(async () => {
+    const headers = await authHeader();
+    if (!headers) return;
+
+    const res = await fetch(`${API_BASE}/api/v1/conversations`, { headers });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    setConversations(data.data);
+  }, [authHeader]);
+
+  const loadConversation = useCallback(
+    async (id: string) => {
+      const headers = await authHeader();
+      if (!headers) return;
+
+      const res = await fetch(`${API_BASE}/api/v1/conversations/${id}`, { headers });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setMessages(
+        data.messages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          sources: m.sources,
+          followUps: m.followUps,
+        })),
+      );
+    },
+    [authHeader],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -69,13 +115,26 @@ export default function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (user) void fetchConversations();
+  }, [user, fetchConversations]);
+
+  useEffect(() => {
+    if (conversationId && user) {
+      if (skipLoadRef.current) {
+        skipLoadRef.current = false;
+        return;
+      }
+      void loadConversation(conversationId);
+    }
+    if (!conversationId) setMessages([]);
+  }, [conversationId, user, loadConversation]);
+
   async function signOut() {
     await supabase.auth.signOut();
   }
 
   function parseSSEChunk(chunk: string) {
-    // Each SSE message is separated by a blank line; may contain
-    // "event: <name>\ndata: <json>"
     return chunk
       .split("\n\n")
       .filter(Boolean)
@@ -139,6 +198,7 @@ export default function Dashboard() {
 
           if (event.event === "conversation") {
             conversationIdRef.current = event.data.id;
+            skipLoadRef.current = true;
             navigate(`/c/${event.data.id}`, { replace: true });
           }
 
@@ -147,7 +207,7 @@ export default function Dashboard() {
               const next = [...prev];
               const last = next[next.length - 1];
               if (!last) return prev;
-              last.content += event.data.text;
+              next[next.length - 1] = { ...last, content: last.content + event.data.text };
               return next;
             });
           }
@@ -165,6 +225,7 @@ export default function Dashboard() {
               };
               return next;
             });
+            void fetchConversations();
           }
 
           if (event.event === "error") {
@@ -172,7 +233,7 @@ export default function Dashboard() {
               const next = [...prev];
               const last = next[next.length - 1];
               if (!last) return prev;
-              last.content = `Error: ${event.data.message}`;
+              next[next.length - 1] = { ...last, content: `Error: ${event.data.message}` };
               return next;
             });
           }
@@ -204,17 +265,26 @@ export default function Dashboard() {
   }
 
   return (
-    <AppShell
-      user={user}
-      onNewSearch={() => {
-        setQuery("");
-        setMessages([]);
-        conversationIdRef.current = undefined;
-        navigate("/");
-      }}
-      onSignOut={() => void signOut()}
-    >
-      <main className="mx-auto flex min-h-full w-full max-w-4xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-10 sm:pt-24 lg:px-14">
+    <div className="flex min-h-screen bg-background">
+      <Sidebar
+        user={user}
+        dbSynced
+        conversations={conversations}
+        activeConversationId={conversationId ?? null}
+        onSelectConversation={(id) => navigate(`/c/${id}`)}
+        onNewThread={() => {
+          setQuery("");
+          setMessages([]);
+          conversationIdRef.current = undefined;
+          navigate("/");
+        }}
+        onSignOut={() => void signOut()}
+        onSignIn={() => navigate("/auth")}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((v) => !v)}
+      />
+
+      <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-10 sm:pt-24 lg:px-14">
         {messages.length === 0 ? (
           <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center pb-24">
             <div className="mb-10 text-center">
@@ -240,6 +310,12 @@ export default function Dashboard() {
               <Textarea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void ask(query);
+                  }
+                }}
                 placeholder="Ask a question..."
                 className="min-h-28 resize-none border-0 bg-transparent px-3 pt-3 text-base shadow-none focus-visible:ring-0"
                 aria-label="Research question"
@@ -299,6 +375,7 @@ export default function Dashboard() {
                   ) : (
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   )}
+
                   {message.sources && message.sources.length > 0 && (
                     <ul className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {message.sources.map((s) => (
@@ -315,7 +392,7 @@ export default function Dashboard() {
             ))}
 
             <form
-              className="fixed inset-x-0 bottom-0 mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card p-2 shadow-[0_12px_35px_-24px_rgba(20,40,40,0.45)] lg:left-64"
+              className="fixed inset-x-0 bottom-0 mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card p-2 shadow-[0_12px_35px_-24px_rgba(20,40,40,0.45)]"
               onSubmit={(event) => {
                 event.preventDefault();
                 void ask(query);
@@ -324,6 +401,12 @@ export default function Dashboard() {
               <Textarea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void ask(query);
+                  }
+                }}
                 placeholder="Ask a follow-up..."
                 className="min-h-14 resize-none border-0 bg-transparent px-3 pt-3 text-base shadow-none focus-visible:ring-0"
                 aria-label="Follow-up question"
@@ -347,6 +430,6 @@ export default function Dashboard() {
           Purplexity can make mistakes. Check important information.
         </p>
       </main>
-    </AppShell>
+    </div>
   );
 }
